@@ -1,39 +1,30 @@
-module prettystacktrace;
-
+module prettymake;
 
 import std.stdio;
 import std.array;
 
-
 void main(string[] args) {
-    // choose between std in and file passed as atgument
-    File* input = &stdin;
-    foreach(int i, arg; args) {
-        if(i==0) continue;
-        if(arg[0]!='-') {
-            // ignore args of the form -foo or --bar
-            input = new File(args[i]);
-            break;
-        }
-    }
-
+    auto input = &stdin;
     string line;
-    while (input.readln(line)) {
-        // remove '\n'
-        if (line.length>1) line = line[0..$-2];
-        else continue;
-        // tokenize
-        auto tokens = line.split(" ");
-        int tokIn = tokens.find("in");
-        int tokAt = tokens.find("at");
-        bool endl = false;
-        // print
-        if (line[0]=='#')   { write("\n", RED, tokens[0] ,RESET); }
-        if (tokIn>0)        { write(" in ", LIGHTBLUE, tokens[tokIn+1] , RESET); }
-        if (tokAt>0)        { write(" at ", LIGHTGREEN, tokens[tokAt+1] , RESET); } 
-    }
+    while (stdin.readln(line)) {
 
+        auto splitErr = line.split("error");
+        
+        for (int i=0; i<splitErr.length;++i) {
+            if (i>0) write(RED, "error",RESET, splitErr[i]);
+            else write(splitErr[i]);       
+        }
+
+        //string output = BLUE ~ line ~ RESET;
+
+        //write(output);
+    }
 }
+
+
+
+
+
 
 
 version(Posix)
