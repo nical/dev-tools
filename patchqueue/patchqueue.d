@@ -6,18 +6,6 @@ import std.array;
 import std.string;
 import std.conv;
 
-// patchqueue [N] -m "add a comment" # sets the comment associated to this patch
-// patchqueue [N] broken # mark as broken
-// patchqueue [N] ok # mark as not broken
-// patchqueue [N] -i N # set importnce
-// patchqueue # should display:
-/*
-1 * name-1 (---**) "bug 173728 comment foo bar blabla"
-2 * name-2 (-****) "bug 173728 other comment foo bar blabla"
-3 * name-3 (--***) "bug 156754 hello foo bar blabla"
-4 - name-4 (----*) [broken] "bug 197635 comment foo bar blabla"
-*/
-
 ulong max(ulong a, ulong b){ return (a>b)?a:b; }
 
 struct Patch {
@@ -37,7 +25,7 @@ void main(string[] args) {
         auto pair = buf.split("$");
         if (pair.length<2) continue;
         comments[pair[0]]=pair[1][0..$-1];
-        //writeln(pair[0],":",pair[1][0..pair[1].length-1]);
+        //writeln(pair[0],"$",pair[1][0..$-1]);
     }
     f.close();
 
@@ -62,34 +50,40 @@ void main(string[] args) {
         if (max(maxlen,patchQueue[i].name.length)>maxlen) maxlen = patchQueue[i].name.length;
     }
 
+    // 
     bool modifiedComments = false;
-    string currPatchName = patchQueue[currentPatch].name;
+    int targetPatch = currentPatch;
     foreach (i, arg;args[1..$]) {
-        
-        auto temp = currPatchName;
         try {
-            currPatchName = patchQueue[to!int(arg)-1].name;
-        } catch(Exception e) {
-            currPatchName = temp;
-        }
+            targetPatch = to!int(arg)-1;
+        } catch(Exception e) {}
         
         if (arg=="-r") {
-            comments[currPatchName] = "-- Review? --";
+            patchQueue[targetPatch].comment = "-- Review? --";
             modifiedComments = true;
         } else if (arg=="-l") {
-            comments[currPatchName] = "-- Landed! --";
+            patchQueue[targetPatch].comment = "-- Landed! --";
             modifiedComments = true;
         } else if (arg=="-m") {
-            if(args.length>i)
-                comments[currPatchName] = args[i+2];
-            else
-                comments[currPatchName] = " ";
+            if(args.length>i){
+                patchQueue[targetPatch].comment = args[i+2];
+            } else {
+                patchQueue[targetPatch].comment = " ";
+            }
             modifiedComments = true;
         }
     }
 
-    if (modifiedComments) comments.save(".patchqueue");
+    // save changes if any
+    if (modifiedComments) {
+        auto f2 = File(".patchqueue","w");
+        foreach (ref p;patchQueue) {
+            f2.writeln(p.name,"$",p.comment);
+        }
+    }
 
+    // output to stdout
+    writeln();
     foreach (i, p;patchQueue) {
         if(p.state=="U") {
             write(GREY, " | ", i+1, " ", p.name);
@@ -98,23 +92,10 @@ void main(string[] args) {
         } else if (p.state=="A") {
             write(" | ", i+1, " ", p.name);
         }
-        //writeln(maxlen);
-
+        
         int nSpaces = 2 + cast(int)maxlen-cast(int)p.name.length;
-        //writeln(nSpaces); continue;
         for (int u=0; u<nSpaces;++u) write(' ');
         writeln("| ", p.comment, RESET);
-    }
-
-
-    //TODO
-}
-
-void save(string[string] comments, string file) {
-    auto f = File(file,"w");
-    foreach (ref p;patchQueue) {
-        p.comment = comments[p.name];
-        f.writeln(p.name,":",p.comment);
     }
 }
 
