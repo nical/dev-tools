@@ -14,9 +14,11 @@ struct Patch {
     string comment;
 }
 
-Patch[] patchQueue;
-
 void main(string[] args) {
+
+    Patch[] patchQueue;
+
+    // load the comments
     shell("touch .patchqueue");
     auto f = File(".patchqueue","r");
     string buf;
@@ -29,42 +31,78 @@ void main(string[] args) {
     }
     f.close();
 
-    string qseries = shell("hg qseries -v");
-    auto lines = qseries.split("\n");
+    
     int currentPatch = 0;
     ulong maxlen = 0;
+    // build the patch queue from hg qseries -v output
+    {
+        string qseries = shell("hg qseries -v");
+        auto lines = qseries.split("\n");
+        foreach (i, line;lines) {
+            auto tokens = line.split(" ");
+            if (tokens.length < 3) break;
 
-    foreach (i, line;lines) {
-        auto tokens = line.split(" ");
-        if (tokens.length < 3) break;
-
-        string com = " ";
-        if (tokens[2] in comments) com = comments[tokens[2]];
-        
-        patchQueue ~= Patch(tokens[2],tokens[1], com );
-        
-        if (tokens[1]=="U" && i>0 && patchQueue[i-1].state=="A") {
-            patchQueue[i-1].state = "C";
-            currentPatch = cast(int)i-1;
+            string com = " ";
+            if (tokens[2] in comments) com = comments[tokens[2]];
+            
+            patchQueue ~= Patch(tokens[2],tokens[1], com );
+            
+            if (tokens[1]=="U" && i>0 && patchQueue[i-1].state=="A") {
+                patchQueue[i-1].state = "C";
+                currentPatch = cast(int)i-1;
+            }
+            if (max(maxlen,patchQueue[i].name.length)>maxlen) maxlen = patchQueue[i].name.length;
         }
-        if (max(maxlen,patchQueue[i].name.length)>maxlen) maxlen = patchQueue[i].name.length;
     }
 
-    // 
+    
+    bool reloadPatchQueue = false;
     bool modifiedComments = false;
     int targetPatch = currentPatch;
+    
+    // process command line arguments
     foreach (i, arg;args[1..$]) {
         try {
             targetPatch = to!int(arg)-1;
+            continue;
         } catch(Exception e) {}
-        
-        if (arg=="-r") {
+
+        if (arg=="export") {            
+            writeln(shell("hg export qtip"));
+        } else if (arg=="diff") {            
+            writeln(shell("hg export qtip | pygmentize -l diff"));
+        } else if (arg=="refresh") {            
+            shell("hg qrefresh");
+        } else if (arg=="try") {
+            // mozilla specific, ush to try server
+            writeln(BLUE," * ", "hg qnew -m 'try: -b do -p all -u all -t none'", RESET);
+                  writeln(shell("hg qnew -m 'try: -b do -p all -u all -t none'"));
+            writeln(BLUE," * ", "hg push -f try", RESET);
+                  writeln(shell("hg push -f try"));
+            writeln(BLUE," * " ,"hg qpop", RESET);
+                  writeln(shell("hg qpop"));
+            writeln(BLUE, " * ","hg qremove try", RESET);
+                  writeln(shell("hg qremove try"));
+            reloadPatchQueue = true;
+        } else if (arg=="push") {
+            writeln(shell("hg qpush"));
+            reloadPatchQueue = true;
+        } else if (arg=="pop") {
+            writeln(shell("hg qpop"));
+            reloadPatchQueue = true;
+        } else if (arg=="-r" || arg=="--review") {
             patchQueue[targetPatch].comment = "-- Review? --";
             modifiedComments = true;
-        } else if (arg=="-l") {
+        } else if (arg=="r+" || arg=="--review+") {
+            patchQueue[targetPatch].comment = "-- Review+ --";
+            modifiedComments = true;
+        } else if (arg=="r-" || arg=="--review+") {
+            patchQueue[targetPatch].comment = "-- Review- --";
+            modifiedComments = true;
+        } else if (arg=="-l" || arg=="--landed") {
             patchQueue[targetPatch].comment = "-- Landed! --";
             modifiedComments = true;
-        } else if (arg=="-m") {
+        } else if (arg=="-m" || arg=="--message") {
             if(args.length>i){
                 patchQueue[targetPatch].comment = args[i+2];
             } else {
@@ -74,30 +112,59 @@ void main(string[] args) {
         }
     }
 
-    // save changes if any
+    // save comment changes if any
     if (modifiedComments) {
-        auto f2 = File(".patchqueue","w");
-        foreach (ref p;patchQueue) {
-            f2.writeln(p.name,"$",p.comment);
+        {
+            auto f2 = File(".patchqueue","w");
+            foreach (ref p;patchQueue) {
+                f2.writeln(p.name,"$",p.comment);
+            }
+        }
+        
+    }
+
+    // if we changed our position in the queue, let's reload it to make sure we
+    // display the right current position
+    if (reloadPatchQueue)
+    {
+        patchQueue = [];
+        string qseries = shell("hg qseries -v");
+        auto lines = qseries.split("\n");
+        foreach (i, line;lines) {
+            auto tokens = line.split(" ");
+            if (tokens.length < 3) break;
+
+            string com = " ";
+            if (tokens[2] in comments) com = comments[tokens[2]];
+            
+            patchQueue ~= Patch(tokens[2],tokens[1], com );
+            
+            if (tokens[1]=="U" && i>0 && patchQueue[i-1].state=="A") {
+                patchQueue[i-1].state = "C";
+                currentPatch = cast(int)i-1;
+            }
+            if (max(maxlen,patchQueue[i].name.length)>maxlen) maxlen = patchQueue[i].name.length;
         }
     }
 
     // output to stdout
     writeln();
     foreach (i, p;patchQueue) {
-        if(p.state=="U") {
-            write(GREY, " | ", i+1, " ", p.name);
+        string s = "";
+        if (i+1<10) s = " ";
+        if (p.state=="U") {
+            write(GREY, " | ", s, i+1, " ", p.name);
         } else if (p.state=="C") {
-            write(LIGHTBLUE, " * ", i+1," ", p.name);
+            write(LIGHTBLUE, " * ", s, i+1," ", p.name);
         } else if (p.state=="A") {
-            write(" | ", i+1, " ", p.name);
+            write(" | ", s, i+1, " ", p.name);
         }
         
         int nSpaces = 2 + cast(int)maxlen-cast(int)p.name.length;
         for (int u=0; u<nSpaces;++u) write(' ');
         writeln("| ", p.comment, RESET);
     }
-}
+} // main
 
 version(Posix)
 {
