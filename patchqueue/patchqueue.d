@@ -75,8 +75,8 @@ void main(string[] args) {
             shell("hg qrefresh");
         } else if (arg=="try") {
             // mozilla specific, ush to try server
-            writeln(BLUE," * ", "hg qnew -m 'try: -b do -p all -u all -t none'", RESET);
-                  writeln(shell("hg qnew -m 'try: -b do -p all -u all -t none'"));
+            writeln(BLUE," * ", "hg qnew -m 'try: -b do -p all -u all -t none' try", RESET);
+                  writeln(shell("hg qnew -m 'try: -b do -p all -u all -t none' try"));
             writeln(BLUE," * ", "hg push -f try", RESET);
                   writeln(shell("hg push -f try"));
             writeln(BLUE," * " ,"hg qpop", RESET);

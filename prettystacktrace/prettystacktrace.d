@@ -32,7 +32,7 @@ void main(string[] args) {
         if (tokIn>0)        { write(" in ", LIGHTBLUE, tokens[tokIn+1] , RESET); }
         if (tokAt>0)        { write(" at ", LIGHTGREEN, tokens[tokAt+1] , RESET); } 
     }
-
+    writeln();
 }
 
 
